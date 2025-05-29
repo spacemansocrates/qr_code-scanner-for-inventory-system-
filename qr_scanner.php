@@ -605,6 +605,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
         }
+
+        /* Real-time scanner styles */
+        .camera-area {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .camera-button {
+            background: #007bff;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .scanner-video {
+            width: 100%;
+            max-width: 400px;
+            height: 300px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            background: #000;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .result-input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+        }
         
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -649,12 +684,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <input type="file" id="file-input" name="qr_image" accept="image/*" required>
             </div>
-            
+
             <div class="loading" id="loading">
                 <div class="spinner"></div>
                 <p>Scanning QR code with multiple methods...</p>
             </div>
         </form>
+
+        <div class="camera-area">
+            <button type="button" id="startCameraBtn" class="camera-button">📷 Start Camera Scan</button>
+            <video id="scannerVideo" class="scanner-video" muted playsinline></video>
+            <input type="text" id="scanResult" class="result-input" placeholder="Scanned QR code will appear here" readonly>
+        </div>
         
         <?php if ($result): ?>
             <div class="result-area result-success">
@@ -699,11 +740,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner.umd.min.js"></script>
     <script>
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const uploadForm = document.getElementById('upload-form');
         const loading = document.getElementById('loading');
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const video = document.getElementById('scannerVideo');
+        const scanResult = document.getElementById('scanResult');
+        let qrScanner;
         
         // Drag and drop functionality
         uploadArea.addEventListener('dragover', (e) => {
@@ -749,17 +795,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     const img = document.createElement('img');
                     img.src = e.target.result;
                     img.className = 'preview-image';
-                    
+
                     const existingPreview = document.querySelector('.preview-image');
                     if (existingPreview) {
                         existingPreview.remove();
                     }
-                    
+
                     uploadArea.appendChild(img);
                 };
                 reader.readAsDataURL(file);
             }
         });
+
+        // Real-time camera scanning
+        function initScanner() {
+            if (!qrScanner) {
+                qrScanner = new QrScanner(
+                    video,
+                    result => {
+                        scanResult.value = result.data;
+                        stopScanner();
+                    },
+                    {
+                        highlightScanRegion: true,
+                        highlightCodeOutline: true,
+                    }
+                );
+            }
+        }
+
+        function startScanner() {
+            initScanner();
+            qrScanner.start().then(() => {
+                video.style.display = 'block';
+                startCameraBtn.disabled = true;
+                startCameraBtn.textContent = 'Scanning...';
+            }).catch(err => {
+                console.error(err);
+                alert('Unable to access camera');
+            });
+        }
+
+        function stopScanner() {
+            if (qrScanner) {
+                qrScanner.stop();
+            }
+            video.style.display = 'none';
+            startCameraBtn.disabled = false;
+            startCameraBtn.textContent = '📷 Start Camera Scan';
+        }
+
+        startCameraBtn.addEventListener('click', startScanner);
     </script>
 </body>
 </html>
