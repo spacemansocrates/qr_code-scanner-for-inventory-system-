@@ -19,9 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $quotation_id = !empty($_POST['quotation_id']) ? (int)$_POST['quotation_id'] : null;
     $reference_number = trim($_POST['reference_number'] ?? '');
     
-    // Validate QR code input
+    // Validate barcode input
     if (empty($qr_code)) {
-        $message = "Please enter or scan a QR code.";
+        $message = "Please enter or scan a barcode.";
         $error_class = 'error';
     } else {
         $result = $inventory->removeStock(
@@ -77,7 +77,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
         } else {
             echo json_encode([
                 'success' => false,
-                'error' => 'Product not found for QR code: ' . $qr_code
+                'error' => 'Product not found for code: ' . $qr_code
             ]);
         }
     } catch (Exception $e) {
@@ -95,8 +95,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Out - QR Scanner</title>
-     <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner.umd.min.js"></script>
+    <title>Stock Out - Barcode Scanner</title>
     <style>
         * {
             margin: 0;
@@ -532,7 +531,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
     <div class="container">
         <div class="header">
             <h1>📦 Stock Out Scanner</h1>
-            <p>Scan QR codes to remove items from inventory</p>
+            <p>Scan barcodes to remove items from inventory</p>
         </div>
         
         <div class="content">
@@ -600,13 +599,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
                     <input type="hidden" name="action" value="scan_out">
                     
                   <div class="form-group">
-        <label for="qr_code">QR Code *</label>
+        <label for="qr_code">Barcode *</label>
         <div class="qr-input-group">
             <input 
                 type="text" 
                 id="qr_code"
                 name="qr_code" 
-                placeholder="Scan QR code or enter manually" 
+                placeholder="Scan barcode or enter manually"
                 required 
                 autofocus
                 autocomplete="off"
@@ -614,12 +613,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
             >
             <div class="qr-scanner-container">
                 <button type="button" id="startScanBtn" class="camera-button">
-                    📷 Scan QR Code
+                    📷 Scan Barcode
                 </button>
             </div>
         </div>
         <small style="color: #666; font-size: 0.9em;">
-            Click "Scan QR Code" to use camera, or type the code manually
+            Click "Scan Barcode" to use camera, or type the code manually
         </small>
     </div>
                     
@@ -666,9 +665,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
                 </form>
                   <div id="scannerModal" class="scanner-modal">
         <div class="scanner-content">
-            <h3 style="text-align: center; margin-bottom: 15px;">📷 QR Code Scanner</h3>
+            <h3 style="text-align: center; margin-bottom: 15px;">📷 Barcode Scanner</h3>
             <div class="scanner-status" id="scannerStatus">
-                <span class="info">Position QR code in front of camera</span>
+                <span class="info">Position barcode in front of camera</span>
             </div>
             <video id="scannerVideo" class="scanner-video" muted playsinline></video>
             <div class="scanner-controls">
@@ -709,8 +708,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
     </div>
 
     <script>
-        // QR Scanner variables
-        let qrScanner = null;
+        // Barcode scanner variables
+        let barcodeDetector = null;
+        let videoStream = null;
         let isScanning = false;
         
         // Track session scans
@@ -724,61 +724,68 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
             document.getElementById('sessionScans').textContent = '<?php echo $_SESSION['scan_count']; ?>';
         <?php endif; ?>
         
-        // Initialize QR Scanner
-        function initQRScanner() {
+        // Initialize Barcode Scanner
+        function initBarcodeScanner() {
             const video = document.getElementById('scannerVideo');
             const statusElement = document.getElementById('scannerStatus');
-            
-            qrScanner = new QrScanner(
-                video,
-                result => {
-                    // QR code detected
-                    document.getElementById('qr_code').value = result.data;
-                    statusElement.innerHTML = '<span class="success">✅ QR Code detected!</span>';
-                    
-                    // Auto-close scanner after successful scan
-                    setTimeout(() => {
-                        closeScanner();
-                        checkProductInfo(); // Check the scanned product
-                    }, 1000);
-                },
-                {
-                    onDecodeError: error => {
-                        // This runs continuously while scanning, so we don't show errors
-                        // unless there's a real problem
-                    },
-                    highlightScanRegion: true,
-                    highlightCodeOutline: true,
-                }
-            );
+
+            barcodeDetector = new BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'code_39'] });
+
+            const scan = () => {
+                if (!isScanning) return;
+                barcodeDetector.detect(video).then(barcodes => {
+                    if (barcodes.length > 0) {
+                        document.getElementById('qr_code').value = barcodes[0].rawValue;
+                        statusElement.innerHTML = '<span class="success">✅ Barcode detected!</span>';
+                        setTimeout(() => {
+                            closeScanner();
+                            checkProductInfo();
+                        }, 1000);
+                    } else {
+                        requestAnimationFrame(scan);
+                    }
+                }).catch(err => {
+                    console.error('Detection error:', err);
+                    requestAnimationFrame(scan);
+                });
+            };
+
+            requestAnimationFrame(scan);
         }
         
-        // Start QR Scanner
+        // Start barcode scanner
         function startScanner() {
             if (isScanning) return;
-            
-            const modal = document.getElementById('scannerModal');  
+
+            const modal = document.getElementById('scannerModal');
             const statusElement = document.getElementById('scannerStatus');
             const startBtn = document.getElementById('startScanBtn');
-            
+
             // Check for camera support
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert('Camera access is not supported in this browser. Please enter the QR code manually.');
+                alert('Camera access is not supported in this browser. Please enter the code manually.');
                 return;
             }
-            
+
+            if (!('BarcodeDetector' in window)) {
+                alert('Barcode Detector API not supported in this browser.');
+                return;
+            }
+
             statusElement.innerHTML = '<span class="info">📷 Starting camera...</span>';
             modal.style.display = 'flex';
             startBtn.disabled = true;
-            
-            if (!qrScanner) {
-                initQRScanner();
-            }
-            
-            qrScanner.start().then(() => {
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(stream => {
+                videoStream = stream;
+                const video = document.getElementById('scannerVideo');
+                video.srcObject = stream;
+                video.play();
                 isScanning = true;
-                statusElement.innerHTML = '<span class="info">🔍 Position QR code in front of camera</span>';
+                statusElement.innerHTML = '<span class="info">🔍 Position barcode in front of camera</span>';
                 startBtn.textContent = '📷 Scanner Active';
+
+                initBarcodeScanner();
             }).catch(err => {
                 console.error('Scanner start error:', err);
                 statusElement.innerHTML = '<span class="error">❌ Camera access denied or not available</span>';
@@ -790,27 +797,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
                 } else if (err.name === 'NotFoundError') {
                     errorMsg += 'No camera found on this device.';
                 } else {
-                    errorMsg += 'Please enter the QR code manually.';
+                    errorMsg += 'Please enter the code manually.';
                 }
-                
+
                 alert(errorMsg);
                 closeScanner();
             });
         }
-        
-        // Close QR Scanner
+
+        // Close barcode scanner
         function closeScanner() {
             const modal = document.getElementById('scannerModal');
             const startBtn = document.getElementById('startScanBtn');
-            
+
             modal.style.display = 'none';
             startBtn.disabled = false;
-            startBtn.textContent = '📷 Scan QR Code';
-            
-            if (qrScanner && isScanning) {
-                qrScanner.stop();
-                isScanning = false;
+            startBtn.textContent = '📷 Scan Barcode';
+
+            if (videoStream) {
+                videoStream.getTracks().forEach(t => t.stop());
+                videoStream = null;
             }
+            isScanning = false;
         }
         
         // Event Listeners
@@ -831,7 +839,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
             }
         });
         
-        // Auto-submit form when QR code is scanned (assuming scanner adds newline)
+        // Auto-submit form when barcode is scanned (assuming scanner adds newline)
         document.getElementById('qr_code').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -933,7 +941,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'check_stock' && isset($_GET['
             document.getElementById('qr_code').focus();
         }
         
-        // Focus on QR code input when page loads
+        // Focus on barcode input when page loads
         window.addEventListener('load', function() {
             document.getElementById('qr_code').focus();
         });

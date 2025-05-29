@@ -60,17 +60,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
                 
-            case 'generate_qr':
+            case 'generate_barcode':
                 $product_id = (int)$_POST['product_id'];
                 $quantity = (int)$_POST['quantity'];
                 
                 if ($product_id > 0 && $quantity > 0) {
                     try {
-                        $result = $inventory->generatePrintableQRCodes($product_id, $quantity, $_SESSION['user_id']);
+                        $result = $inventory->generatePrintableBarcodes($product_id, $quantity, $_SESSION['user_id']);
                         
                         // Store result in session for printing page
                         $_SESSION['print_data'] = $result;
-                        header('Location: print_qr_codes.php');
+                        header('Location: print_barcodes.php');
                         exit;
                     } catch (Exception $e) {
                         $message = "Error generating QR codes: " . $e->getMessage();
@@ -614,12 +614,12 @@ $stock_summary = $stmt->fetch(PDO::FETCH_ASSOC);
                 </form>
             </div>
             
-            <!-- Generate QR Codes Form -->
+            <!-- Generate Barcodes Form -->
             <div class="form-section">
-                <h2>🏷️ Generate QR Codes</h2>
-                
-                <form method="POST" id="generateQRForm">
-                    <input type="hidden" name="action" value="generate_qr">
+                <h2>🏷️ Generate Barcodes</h2>
+
+                <form method="POST" id="generateBarcodeForm">
+                    <input type="hidden" name="action" value="generate_barcode">
                     
                     <div class="form-group">
                         <label for="qr_product_id">Select Product *</label>
@@ -631,21 +631,21 @@ $stock_summary = $stmt->fetch(PDO::FETCH_ASSOC);
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="help-text">Select product to generate QR codes for</div>
+                        <div class="help-text">Select product to generate barcodes for</div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="qr_quantity">Number of QR Codes *</label>
+                        <label for="qr_quantity">Number of Barcodes *</label>
                         <input type="number" name="quantity" id="qr_quantity" min="1" max="1000" required>
-                        <div class="help-text">How many identical QR codes to generate (max 1000)</div>
+                        <div class="help-text">How many identical barcodes to generate (max 1000)</div>
                     </div>
                     
                     <button type="submit" class="btn btn-warning btn-full">
-                        🖨️ Generate & Print QR Codes
+                        🖨️ Generate & Print Barcodes
                     </button>
                     
                     <div class="help-text" style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 4px;">
-                        <strong>Note:</strong> Each product has one unique QR code. When you generate multiple codes, 
+                        <strong>Note:</strong> Each product has one unique barcode. When you generate multiple codes,
                         they will all be identical and can be attached to individual units of the same product.
                     </div>
                 </form>
@@ -763,7 +763,7 @@ $stock_summary = $stmt->fetch(PDO::FETCH_ASSOC);
             }, 3000);
         });
         
-        document.getElementById('generateQRForm').addEventListener('submit', function(e) {
+        document.getElementById('generateBarcodeForm').addEventListener('submit', function(e) {
             const quantity = parseInt(document.getElementById('qr_quantity').value);
             const productId = document.getElementById('qr_product_id').value;
             
@@ -782,7 +782,7 @@ $stock_summary = $stmt->fetch(PDO::FETCH_ASSOC);
             // Show loading state
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.textContent;
-            submitBtn.textContent = '⏳ Generating QR Codes...';
+            submitBtn.textContent = '⏳ Generating Barcodes...';
             submitBtn.disabled = true;
         });
         
@@ -803,7 +803,7 @@ $stock_summary = $stmt->fetch(PDO::FETCH_ASSOC);
                 document.getElementById('product_id').focus();
             }
             
-            // Alt + Q to focus on QR generation form
+            // Alt + Q to focus on barcode generation form
             if (e.altKey && e.key === 'q') {
                 e.preventDefault();
                 document.getElementById('qr_product_id').focus();

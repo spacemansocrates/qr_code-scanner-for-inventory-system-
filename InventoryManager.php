@@ -1,9 +1,6 @@
 <?php
 require_once 'database.php';
-require_once 'vendor/autoload.php'; // For QR code library
-
-use Endroid\QrCode\QrCode;
-use Endroid\QrCode\Writer\PngWriter;
+require_once 'BarcodeGenerator.php';
 
 class InventoryManager {
     private $conn;
@@ -15,26 +12,26 @@ class InventoryManager {
     }
 
     /**
-     * Generate QR code for a product (if not exists)
+     * Generate barcode for a product (if not exists)
      */
-    public function generateProductQRCode($product_id) {
-        // Check if product already has QR code
+    public function generateProductBarcode($product_id) {
+        // Check if product already has a code stored
         $stmt = $this->conn->prepare("SELECT qr_code FROM products WHERE id = ?");
         $stmt->execute([$product_id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($result && !empty($result['qr_code'])) {
             return $result['qr_code'];
         }
-        
-        // Generate unique QR code content
-        $qr_content = "PROD_" . str_pad($product_id, 6, "0", STR_PAD_LEFT);
-        
-        // Update product with QR code
+
+        // Generate unique barcode content
+        $barcode_content = "PROD_" . str_pad($product_id, 6, "0", STR_PAD_LEFT);
+
+        // Update product with barcode
         $stmt = $this->conn->prepare("UPDATE products SET qr_code = ? WHERE id = ?");
-        $stmt->execute([$qr_content, $product_id]);
-        
-        return $qr_content;
+        $stmt->execute([$barcode_content, $product_id]);
+
+        return $barcode_content;
     }
 
     /**
@@ -99,13 +96,13 @@ class InventoryManager {
         try {
             $this->conn->beginTransaction();
             
-            // Get product ID from QR code
+            // Get product ID from barcode
             $stmt = $this->conn->prepare("SELECT id, name, sku FROM products WHERE qr_code = ?");
             $stmt->execute([$qr_code]);
             $product = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$product) {
-                throw new Exception("Product not found for QR code: " . htmlspecialchars($qr_code));
+                throw new Exception("Product not found for code: " . htmlspecialchars($qr_code));
             }
             
             $product_id = $product['id'];
@@ -169,11 +166,11 @@ class InventoryManager {
     }
 
     /**
-     * Generate printable QR codes for stock addition
+     * Generate printable barcodes for stock addition
      */
-    public function generatePrintableQRCodes($product_id, $quantity_to_print, $user_id) {
-        // Generate QR code for product if it doesn't exist, or get existing
-        $qr_content = $this->generateProductQRCode($product_id);
+    public function generatePrintableBarcodes($product_id, $quantity_to_print, $user_id) {
+        // Generate barcode for product if it doesn't exist, or get existing
+        $barcode_content = $this->generateProductBarcode($product_id);
         
         // Get product details
         $stmt_product = $this->conn->prepare("SELECT name, sku, description FROM products WHERE id = ?");
@@ -192,23 +189,18 @@ class InventoryManager {
         ");
         $stmt_batch->execute([$product_id, $batch_reference, $quantity_to_print, $user_id]);
         
-        // Generate QR code image
-        // Ensure Endroid QR Code library is correctly loaded via vendor/autoload.php
+        // Generate barcode image using built-in generator
         try {
-            $qr = QrCode::create($qr_content); // Use ::create() for newer versions
-            $writer = new PngWriter();
-            $qr_image_data = $writer->write($qr)->getString();
-            $qr_image_base64 = base64_encode($qr_image_data);
+            $barcode_image_base64 = BarcodeGenerator::generate($barcode_content);
         } catch (Exception $e) {
-            // Log error or handle it appropriately
-            error_log("QR Code generation error: " . $e->getMessage());
-            return ['success' => false, 'error' => 'Failed to generate QR image. ' . $e->getMessage()];
+            error_log('Barcode generation error: ' . $e->getMessage());
+            return ['success' => false, 'error' => 'Failed to generate barcode image. ' . $e->getMessage()];
         }
         
         return [
             'success' => true,
-            'qr_content' => $qr_content,
-            'qr_image_base64' => $qr_image_base64,
+            'barcode_content' => $barcode_content,
+            'barcode_image_base64' => $barcode_image_base64,
             'product' => $product,
             'quantity' => $quantity_to_print, // Use the parameter name for clarity
             'batch_reference' => $batch_reference
